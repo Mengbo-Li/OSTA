@@ -35,16 +35,12 @@ First, we set up the Python environment and install `COMMOT`:
 # set up Python environment using reticulate
 
 # install Miniconda
+# set to accept terms of service
+Sys.setenv(CONDA_PLUGINS_AUTO_ACCEPT_TOS = "yes")
+Sys.setenv(CI = "true")
 #if (is.null(miniconda_path())) {
 install_miniconda()
 #}
-
-# set to conda-forge-only configuration
-# to avoid errors due to Anaconda terms of service prompt
-conda <- conda_binary()
-system2(conda, c("config", "--remove-key", "channels"))
-system2(conda, c("config", "--add", "channels", "conda-forge"))
-system2(conda, c("config", "--set", "channel_priority", "strict"))
 
 # create environment
 env <- "img-ccc"
