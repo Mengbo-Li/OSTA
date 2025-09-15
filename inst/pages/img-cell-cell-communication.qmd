@@ -39,6 +39,14 @@ First, we set up the Python environment and install `COMMOT`:
 install_miniconda()
 #}
 
+# set to conda-forge-only configuration
+# to avoid errors due to Anaconda terms of service prompt
+conda <- conda_binary()
+system2(conda, c("config", "--remove-key", "channels"))
+system2(conda, c("config", "--add", "channels", "conda-forge"))
+system2(conda, c("config", "--set", "channel_priority", "strict"))
+
+# create environment
 env <- "img-ccc"
 #if (!(env %in% conda_list()$name)) {
 conda_create(env, packages = "python=3.11")
