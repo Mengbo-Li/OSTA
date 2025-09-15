@@ -80,7 +80,7 @@ Load example dataset:
 ```{r load-data}
 # load data
 # retrieve dataset from OSF repository
-id <- "CosMx6k_HumanBrain"
+id <- "CosMx1k_MouseBrain1"  # 'CosMx6k_HumanBrain' too large for GitHub Actions
 pa <- OSTA.data_load(id)
 dir.create(td <- tempfile())
 unzip(pa, exdir = td)
@@ -89,6 +89,8 @@ unzip(pa, exdir = td)
 
 ```{r preprocessing}
 # preprocessing
+keep <- colSums(counts(spe)) > 0
+spe <- spe[, keep]
 spe <- logNormCounts(spe, BPPARAM = bp)
 
 # wrangling
@@ -107,7 +109,7 @@ ct <- import("commot")
 
 # retrieve L-R interactions from CellChatDB and filter for those that are 
 # fully covered by the 1k-plex CosMx panel
-db <- ct$pp$ligand_receptor_database(database = "CellChat", species = "human")
+db <- ct$pp$ligand_receptor_database(database = "CellChat", species = "mouse")
 names(db) <- c("ligand", "receptor", "pathway", "type")
 nrow(db)
 
