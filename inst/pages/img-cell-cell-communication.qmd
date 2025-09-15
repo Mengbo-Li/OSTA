@@ -9,106 +9,134 @@ Cell-cell communication analyses aim to investigate how cells interact within ti
 Several methods have been developed for these types of analyses. In general, these methods require annotated cell types, spatial coordinates, and curated lists of ligand-receptor (L-R) pairs (and optionaly pathway or target gene sets) as inputs. Ligand-receptor pairs can be accessed from databases including `OmniPath`, `CellChatDB`, `CellPhoneDB`, and others.
 
 
-### Example
+### Dependencies
+
+```{r deps, message=FALSE, warning=FALSE}
+library(reticulate)
+library(zellkonverter)
+library(SingleCellExperiment)
+library(SpatialExperiment)
+library(OSTA.data)
+library(SpatialExperimentIO)
+library(scater)
+library(BiocParallel)
+```
+
+
+## Example using `COMMOT`
 
 Here, we demonstrate a short example using `COMMOT` [@Cang2023-COMMOT], an optimal transport-based approach that models competition between sender and receiver signals, considers physical distances, and easily links to public databases.
 
-Since `COMMOT` is available as a Python package, we can access it from R using `r BiocStyle::Biocpkg("reticulate")` and `r BiocStyle::Biocpkg("basilisk")` (see @sec-bkg-python-interoperability).
+Since `COMMOT` is available as a Python package, we can access it from R using `r BiocStyle::Biocpkg("reticulate")` (see @sec-bkg-python-interoperability).
 
+First, we set up the Python environment and install `COMMOT`:
 
-```{r eval=FALSE}
-# dependencies
-suppressPackageStartupMessages({
-    library(scater)
-    library(reticulate)
-    library(BiocParallel)
-    library(zellkonverter)
-    library(SingleCellExperiment)
-    library(basilisk)
-    library(OSTA.data)
-    library(SpatialExperimentIO)
-})
+```{r}
+# set up Python environment using reticulate
 
-# setup
-bp <- MulticoreParam(4)
+# install Miniconda
+if (is.null(miniconda_path())) {
+  install_miniconda()
+}
 
-env <- BasiliskEnvironment(
-  envname = "img-ccc", 
-  pkgname = "base", 
-  packages = c("python=3.11"), 
-  pip = c("commot==0.0.3")
+env <- "img-ccc"
+if (!(env %in% conda_list()$name)) {
+  conda_create(env, packages = "python=3.11")
+}
+use_condaenv(env, required = TRUE)
+
+# install Python packages from conda-forge
+# these are dependency packages for commot that need to be installed from conda-forge (not PyPI)
+conda_install(
+  envname = env, 
+  packages = c("libcxx", "llvm-openmp", "llvmlite", "numba"), 
+  channel = "conda-forge"
 )
 
-use_virtualenv(obtainEnvironmentPath(env))
+# install Python packages from PyPI
+# commot is available from PyPI
+conda_install(
+  envname = env, 
+  packages = c("commot==0.0.3", "anndata==0.12.2", "pandas==2.3.2"), 
+  pip = TRUE
+)
+
+# run {python} chunks via reticulate
+knitr::opts_chunk$set(python.reticulate = TRUE)
+```
+
+```{r}
+# set up parallelization
+bp <- MulticoreParam(4)
+```
 
 
-#env_path <- obtainEnvironmentPath(env)
-#py <- file.path(env_path, "bin", "python")
-#libdir <- file.path(env_path, "lib")
+Load example dataset:
 
-#Sys.setenv(
-#  DYLD_LIBRARY_PATH          = libdir,
-#  DYLD_FALLBACK_LIBRARY_PATH = libdir,
-#  RETICULATE_PYTHON          = py
-#)
-
-#use_python(py, required = TRUE)
-#py_config()
-
-
-# loading
+```{r load-data}
+# load data
 # retrieve dataset from OSF repository
-#id <- "CosMx6k_HumanBrain"
-#pa <- OSTA.data_load(id)
-#dir.create(td <- tempfile())
-#unzip(pa, exdir=td)
-#(spe <- readCosmxSXE(td, addTx=FALSE))
+id <- "CosMx6k_HumanBrain"
+pa <- OSTA.data_load(id)
+dir.create(td <- tempfile())
+unzip(pa, exdir = td)
+(spe <- readCosmxSXE(td, addTx = FALSE))
+```
 
-
-sce <- readRDS(...)
-sce <- logNormCounts(sce, BPPARAM=bp)
+```{r preprocessing}
+# preprocessing
+spe <- logNormCounts(spe, BPPARAM = bp)
 
 # wrangling
-xy <- spatialCoords(sce)
-reducedDim(sce, "spatial") <- xy
+xy <- spatialCoords(spe)
+reducedDim(spe, "spatial") <- xy
+```
 
-# run 'COMMOT'
+
+Run `COMMOT` using `reticulate` to run Python code:
+
+```{r run-commot}
+# run COMMOT using reticulate
 ad <- import("anndata")
 pd <- import("pandas")
 ct <- import("commot")
 
-# retrieve LR interaction from CellChatDB & filter for 
-# those that are fully covered by the 1k-plex CosMx panel
-db <- ct$pp$ligand_receptor_database(database="CellChat", species="human")
-names(db) <- c("ligand", "receptor", "pathway", "type"); nrow(db)
+# retrieve L-R interactions from CellChatDB and filter for those that are 
+# fully covered by the 1k-plex CosMx panel
+db <- ct$pp$ligand_receptor_database(database = "CellChat", species = "human")
+names(db) <- c("ligand", "receptor", "pathway", "type")
+nrow(db)
+
 db <- db[apply(db, 1, \(.) {
-    rs <- strsplit(.["receptor"], "_")
-    lr <- c(.["ligand"], unlist(rs))
-    all(lr %in% rownames(sce))
-}), ]; nrow(db)
+  rs <- strsplit(.["receptor"], "_")
+  lr <- c(.["ligand"], unlist(rs))
+  all(lr %in% rownames(spe))
+}), ]
+nrow(db)
 
 # subset to features being considered
 rs <- sapply(strsplit(db$receptor, "_"), .subset, 1)
-nrow(sce <- sce[unique(c(db$ligand, rs)), ])
+nrow(spe <- spe[unique(c(db$ligand, rs)), ])
 
-is <- split(colnames(sce), sce$fov)
-sr <- bplapply(is, BPPARAM=bp, \(.) { 
-    # skip FoV when there are too few cells
-    if (length(.) < 100) return(NULL) 
-    ad <- SCE2AnnData(sce[, .], X_name="logcounts")
-    ct$tl$spatial_communication(ad,
-        database_name="CellChatDB",
-        # average cell is 10x10um; here, we consider 
-        # a distance threshold of 10 cells = 0.1mm
-        dis_thr=0.1,  
-        df_ligrec=db,
-        heteromeric=TRUE,
-        pathway_sum=TRUE,
-        heteromeric_rule="min",
-        heteromeric_delimiter="_")
-    list(
-        ad$obsm["commot-CellChatDB-sum-sender"], 
-        ad$obsm["commot-CellChatDB-sum-receiver"])
+is <- split(colnames(spe), spe$fov)
+sr <- bplapply(is, BPPARAM = bp, \(.) {
+  # skip FoV when there are too few cells
+  if (length(.) < 100) return(NULL)
+  ad <- SCE2AnnData(spe[, .], X_name = "logcounts")
+  ct$tl$spatial_communication(
+    ad, 
+    database_name = "CellChatDB", 
+    # assume average cell is 10x10um; here, we consider a 
+    # distance threshold of 10 cells = 0.1mm
+    dis_thr = 0.1, 
+    df_ligrec = db, 
+    heteromeric = TRUE, 
+    pathway_sum = TRUE, 
+    heteromeric_rule = "min", 
+    heteromeric_delimiter = "_")
+  list(
+    ad$obsm["commot-CellChatDB-sum-sender"], 
+    ad$obsm["commot-CellChatDB-sum-receiver"])
 })
 ```
 
