@@ -40,9 +40,9 @@ install_miniconda()
 #}
 
 env <- "img-ccc"
-if (!(env %in% conda_list()$name)) {
-  conda_create(env, packages = "python=3.11")
-}
+#if (!(env %in% conda_list()$name)) {
+conda_create(env, packages = "python=3.11")
+#}
 use_condaenv(env, required = TRUE)
 
 # install Python packages from conda-forge
