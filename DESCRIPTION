@@ -108,7 +108,7 @@ Suggests:
     quarto,
     scrapper,
     sessioninfo, 
-    xml2 
+    xml2
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 BiocType: Book
