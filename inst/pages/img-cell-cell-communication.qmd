@@ -35,9 +35,9 @@ First, we set up the Python environment and install `COMMOT`:
 # set up Python environment using reticulate
 
 # install Miniconda
-if (is.null(miniconda_path())) {
-  install_miniconda()
-}
+#if (is.null(miniconda_path())) {
+install_miniconda()
+#}
 
 env <- "img-ccc"
 if (!(env %in% conda_list()$name)) {
