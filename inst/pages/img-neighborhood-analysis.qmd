@@ -313,8 +313,8 @@ plotCorHeatmap(mod, roi=10)
 Next, we can divide cells into different levels of grid density:
 
 ```{r scider-contour, message=FALSE, fig.width=6, fig.height=4}
-spe <- getContour(spe, coi=1)
-plotContour(spe, coi=1) + coord_equal()
+spe <- getContour(spe, coi="x1")
+plotContour(spe, coi="x1") + coord_equal()
 ```
 
 We can then annotate cells by their locations within each contour, and 
