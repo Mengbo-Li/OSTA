@@ -12,6 +12,7 @@ Neighborhood analysis aims to investigate the composition of and interaction bet
 ```{r deps, message=FALSE, warning=FALSE}
 library(dplyr)
 library(tidyr)
+library(scider)
 library(ggplot2)
 library(patchwork)
 library(RColorBrewer)
@@ -39,7 +40,7 @@ theme_xy <- list(
 ## Nearest neighbors
 
 Custom spatial analyses may rely on identifying nearest neighbors (NNs) of cells.
-We recommend `r BiocStyle::CRANpkg("RANN")` for this purpose, which finds NNs in **$O(N\log N)$ time for $N$ cells** (c.f., conventional approaches would take $O(N^2)$ time) by relying on a Approximate Near Neighbor (ANN) C++ library.
+We recommend `r BiocStyle::CRANpkg("RANN")` for this purpose, which finds NNs in **$O(N\log N)$ time for $N$ cells** (by comparison, conventional approaches would take $O(N^2)$ time) by relying on a Approximate Near Neighbor (ANN) C++ library.
 Furthermore, there is support for **exact, approximate, and fixed-radius searchers**.
 The latter is of particular interest in biology; e.g., one might require $k$NNs to lie within a biologically sensible distance as to avoid consideration of cells that are far-off, especially in sparse regions or at tissue borders.
 
@@ -237,6 +238,95 @@ ggplot(fd, aes(k, value, fill=k)) +
 ```
 
 :::
+
+## Cellular density
+
+The `r BiocStyle::Biocpkg("scider")` package provides functions to model 
+the global density of cells across a tissue section, and allows for several 
+downstream analyses, including:
+
+- cellular co-localization analysis
+- boundary detection analysis
+- differential density analysis
+
+All functions operate on `SpatialExperiment` objects, allowing seemless integration. 
+
+Here, we will demonstrate how to:
+
+i. estimate and visualize cellular density
+i. stratify cells based on their density (via countours)
+i. quantify how subpopulation composition changes with cellular density
+
+```{r}
+# non-valid names for clusters are problematic for 'scider',
+# so that we use x1-16 instead of 1-16 as 'cell_type's
+spe$cell_type <- paste0("x", spe$k)
+```
+
+```{r scider-est}
+# perform kernel density estimation
+# (here, using all clusters)
+spe <- gridDensity(spe)
+# the resulting 'DataFrame' contains 
+# one 'density_x*' column per cluster
+res <- metadata(spe)$grid_density
+head(res[, seq_len(7)])
+```
+
+We can visualize cellular densities stratified by subpopulation, i.e.,
+each panel panel depicts the density of one subpopulation:
+
+```{r scider-, warning=FALSE, fig.width=6, fig.height=5}
+#| code-fold: true
+ps <- lapply(levels(spe$k), \(k) plotDensity(spe, k) + ggtitle(k))
+wrap_plots(ps, nrow=4) & 
+    theme_xy & theme(
+        legend.position="none",
+        plot.title=element_text(hjust=0.5))
+```
+
+`scider`'s `findROI()` can be used to detect regions of interest (ROIs) based
+on the density of particular subpopulations. Specificelly, the method employs
+graph-based community dection to cluster cells based on their density:
+
+```{r scider-roi, fig.width=5, fig.height=4}
+spe <- findROI(spe, coi="x1") # detect ROIs
+res <- metadata(spe)$roi      # access results
+nlevels(res$component)        # how many ROIs?
+plotROI(spe) + coord_equal()  # visualize
+```
+
+After defining ROIs, we can test the relationship between any 
+two subpopulations within each ROI, or overall but accounting 
+for ROI variation. Results can be visualized in a heatmap where 
+
+- rows/columns = subpopulations and 
+- bin values = correlation of their cellular  
+(low = avoidance, high = co-localization).
+
+```{r scider-cor, fig.width=5, fig.height=4.5}
+#| layout-ncol: 2
+mod <- corDensity(spe)
+plotCorHeatmap(mod, roi=10)
+```
+
+Next, we can divide cells into different levels of grid density:
+
+```{r scider-contour, message=FALSE, fig.width=6, fig.height=4}
+spe <- getContour(spe, coi=1)
+plotContour(spe, coi=1) + coord_equal()
+```
+
+We can then annotate cells by their locations within each contour, and 
+visualize their composition from lowest to highest cellular density;
+for example, 
+
+```{r scide-allocate, message=FALSE, fig.width=6, fig.height=4}
+spe <- allocateCells(spe)
+plotCellCompo(spe, coi="x1") + 
+    coord_cartesian(expand=FALSE) +
+    theme(legend.key.size=unit(0.8, "lines"))
+```
 
 
 ## Appendix
