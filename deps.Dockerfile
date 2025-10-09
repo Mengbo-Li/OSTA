@@ -3,4 +3,4 @@ FROM bioconductor/bioconductor_docker:${BIOC_VERSION}
 COPY . /opt/pkg
 
 # Install book package 
-RUN Rscript -e 'repos <- BiocManager::repositories() ; BiocManager::install(c("SpatialExperiment", "AUCell", "BayesSpace"), dependencies = TRUE, type = "source", force = TRUE) ; remotes::install_local(path = "/opt/pkg/", repos=repos, dependencies=TRUE, build_vignettes=FALSE, upgrade=TRUE) ; sessioninfo::session_info(installed.packages()[,"Package"], include_base = TRUE)'
+RUN Rscript -e 'repos <- BiocManager::repositories() ; BiocManager::install(c("SpatialExperiment", "AUCell"), dependencies = TRUE, type = "source", force = TRUE) ; remotes::install_github("edward130603/BayesSpace", force = TRUE) ; remotes::install_local(path = "/opt/pkg/", repos=repos, dependencies=TRUE, build_vignettes=FALSE, upgrade=TRUE) ; sessioninfo::session_info(installed.packages()[,"Package"], include_base = TRUE)'
